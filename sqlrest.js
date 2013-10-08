@@ -174,6 +174,12 @@ function apiCall(_options, _callback) {
 		//Prepare the request
 		xhr.open(_options.type, _options.url);
 
+        if (Alloy.CFG.httpUsername && Alloy.CFG.httpPassword) {
+            // Http Auth
+            var authstr = 'Basic ' + Titanium.Utils.base64encode(Alloy.CFG.httpUsername + ':' + Alloy.CFG.httpPassword);
+            xhr.setRequestHeader('Authorization', authstr);
+        }
+
 		xhr.onload = function() {
 			var responseJSON, success = true, error;
 			
