@@ -2,6 +2,7 @@
  * SQL Rest Adapter for Titanium Alloy
  * @author Mads Møller
  * @version 0.1.32
+ * @fork moshemarciano
  * Copyright Napp ApS
  * www.napp.dk
  */
@@ -22,6 +23,45 @@ var cache = {
 	URL : null
 };
 
+var checksum;
+
+function createRelation(config, Model) {
+
+	if (!config.relations || config.hasRelations) 
+		return;
+		
+	_.mixin(require('underscore.inflections'));	
+	
+	function ucfirst(text) {
+	    if (!text) return text;
+	    return text[0].toUpperCase() + text.substr(1);
+	}
+
+    relations = config.relations;
+    
+	for(item in relations) {
+		var col = item;
+		var fname = relations[item].method ? relations[item].method : 'fetch' + 
+			(relations[item].type && relations[item].type == 'one' ? _.singularize(ucfirst(item)) : ucfirst(item));
+
+		var col_id = relations[item].collection_id ? relations[item].collection_id : 
+			_.singularize(config.adapter.collection_name) + '_id';
+			
+		var idAttribute = config.adapter.idAttribute || 'id';
+		
+		Model.prototype[fname] = function (opts) {
+			var options = _.extend(opts, {localOnly:true,reset: true});
+			if (!options.sql.where) options.sql.where = {};
+			options.sql.where[col_id] = this[idAttribute];
+			
+			Alloy.Collections[col].sync('read', Alloy.Collections[col], options);
+			return Alloy.Collections[col].models.length;
+		};
+	}
+	
+	config.hasRelations = true;	
+}
+
 // The sql-specific migration object, which is the main parameter
 // to the up() and down() migration functions.
 //
@@ -33,7 +73,8 @@ var cache = {
 // idAttribute   The unique ID column for this model, which is
 //               mapped back to Backbone.js for its update and
 //               delete operations.
-function Migrator(config, transactionDb) {
+function Migrator(config, transactionDb, Model) {
+	
 	this.db = transactionDb;
 	this.dbname = config.adapter.db_name;
 	this.table = config.adapter.collection_name;
@@ -116,6 +157,9 @@ function Migrator(config, transactionDb) {
 		sql += conditions.join(" AND ");
 		this.db.execute(sql, values);
 	};
+	
+	if (Model)
+		createRelation(config, Model);
 }
 
 function apiCall(_options, _callback) {
@@ -185,7 +229,18 @@ function apiCall(_options, _callback) {
 			_options.beforeSend(xhr);
 		}
 		
-		xhr.send(_options.data || null);
+		if (!_options.cachedData)
+			xhr.send(_options.data || null);
+		else {
+			_callback({
+				success : true,
+				status : 'ok',
+				code : 200,
+				data: null,
+				responseText : null,
+				responseJSON : _options.cachedData || null
+			});
+		}
 	} else {
 		//we are offline
 		_callback({
@@ -209,6 +264,7 @@ function Sync(method, model, opts) {
 	var returnErrorResponse = model.config.returnErrorResponse;
 	
 	var singleModelRequest = null;
+	var cachedData = opts.cachedData;
 	if (lastModifiedColumn) {
 		if (opts.sql && opts.sql.where) {
 			singleModelRequest = opts.sql.where[model.idAttribute];
@@ -218,6 +274,12 @@ function Sync(method, model, opts) {
 		}
 	}
 
+	if (DEBUG) { 
+		Ti.API.error('SYNC start for ' + model.config.adapter.collection_name + '	method:' + method
+			+ '	model:' + JSON.stringify(model.config, null, '\t') + '	opts:' + JSON.stringify(opts, null, '\t')
+			+ '	cache:' + JSON.stringify(cachedData, null, '\t'));
+	}
+	
 	//REST API
 	var methodMap = {
 		'create' : 'POST',
@@ -254,7 +316,7 @@ function Sync(method, model, opts) {
 	}
 
 	// We need to ensure that we have a base url.
-	if (!params.url) {
+	if (!params.url  && !cachedData) {
 		params.url = (model.config.URL || model.url());
 		if (!params.url) {
 			Ti.API.error("[SQL REST API] ERROR: NO BASE URL");
@@ -330,6 +392,10 @@ function Sync(method, model, opts) {
 				params.url = params.url + "/search/" + Ti.Network.encodeURIComponent(params.search);
 			}
 
+			if (checksum) {
+				params.urlparams = _.extend(params.urlparams ? params.urlparams : {}, {"checksum" : checksum});
+			}
+
 			if (params.urlparams) {
 				// build url with parameters
 				params.url = encodeData(params.urlparams, params.url);
@@ -348,10 +414,24 @@ function Sync(method, model, opts) {
 					serverData : false
 				});
 			}
+			
+			if (cachedData)
+				params.cachedData = cachedData;
 
 			apiCall(params, function(_response) {
 				if (_response.success) {
 					var data = parseJSON(_response, parentNode);
+					
+					Ti.API.info("[CHECKSUM] check");
+//					if ( (model.config.checksum && data[model.config.checksum]) ||
+//						 (_.isUndefined(model.config.checksum) && data.checksum) ) {
+						// did the response include a checksum save
+						// it for next requests to help the server
+						// figure out if there is anything new
+						//Ti.API.error('checksum detected : ' + data[model.config.checksum]);
+						//checksum = data.checksum;
+//					}
+					
 					if (_.isUndefined(params.localOnly)) {
 						//we dont want to manipulate the data on localOnly requests
 						saveData(data);
@@ -553,7 +633,10 @@ function Sync(method, model, opts) {
 		db = Ti.Database.open(dbName);
 		db.execute('BEGIN;');
 		db.execute(sqlInsert, values);
-
+		if (DEBUG) {
+			Ti.API.debug("createSQL sql: " + sqlInsert);
+			Ti.API.debug("createSQL values: " + JSON.stringify(values, null, '\t'));
+		}
 		// get the last inserted id
 		if (model.id === null) {
 			var sqlId = "SELECT last_insert_rowid();";
@@ -617,6 +700,10 @@ function Sync(method, model, opts) {
 		var len = 0;
 		var values = [];
 
+
+		if (opts.reset)
+			model.reset();
+
 		// iterate through all queried rows
 		while (rs.isValidRow()) {
 			var o = {};
@@ -668,10 +755,27 @@ function Sync(method, model, opts) {
 			}
 		}
 
+		var fields = []; 
+		_.extend(fields, columns, model.config.relations);
 		// Create arrays for insert query
 		var names = [], values = [], q = [];
-		for (var k in columns) {
-			if (!_.isUndefined(attrObj[k])) {//only update those who are in the data
+		for (var k in fields) {
+			if (!_.isUndefined(attrObj[k])) { //only update those who are in the data
+				if (_.isObject(attrObj[k])) {					
+					if(!_.isUndefined(Alloy.Collections[k])) { // is this in itself another collection?
+						Ti.API.info("running SYNC for " + k);	
+						//Alloy.Collections[k].sync(method, model, opts, attrObj[k]);
+						o = Alloy.Collections[k];
+						Ti.API.error('method: ' + method);
+						Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
+						
+						Alloy.Collections[k].sync(method, Alloy.Collections[k], {"cachedData": attrObj[k]});
+						continue;
+					} else
+						values.push(JSON.stringify(attrObj[k])); 
+				} else
+					values.push(attrObj[k]);
+					
 				names.push(k + '=?');
 				if (_.isObject(attrObj[k])) {
 					values.push(JSON.stringify(attrObj[k]));
@@ -695,6 +799,7 @@ function Sync(method, model, opts) {
 
 		if (lastModifiedColumn && _.isUndefined(params.disableLastModified)) {
 			var updateSQL = "UPDATE " + table + " SET " + lastModifiedColumn + " = DATETIME('NOW') WHERE " + model.idAttribute + "=?";
+			Ti.API.debug('=> set lastModified : ' + updateSQL);
 			db.execute(updateSQL, attrObj[model.idAttribute]);
 		}
 
@@ -942,7 +1047,7 @@ function Migrate(Model) {
 
 	// Get the db name for this model and set up the sql migration obejct
 	config.adapter.db_name || (config.adapter.db_name = ALLOY_DB_DEFAULT);
-	var migrator = new Migrator(config);
+	var migrator = new Migrator(config, null, Model);
 
 	// Get the migration number from the config, or use the number of
 	// the last migration if it's not present. If we still don't have a
