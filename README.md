@@ -69,11 +69,11 @@ both one column index and multiple column index are supported
 		db.createTable({
 	        columns: {
 	            id: 'INTEGER PRIMARY KEY',
-	            title: 'TEXT'
+	            time: 'TEXT'
 	        }
 		});
 		db.createIndex({
-			'firstIdx' : ['title', 'time'],   
+			'firstIdx' : ['id', 'time'],   
 		   	'timeIdx' : 'time'
 		});
 	};

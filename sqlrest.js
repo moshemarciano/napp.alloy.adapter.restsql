@@ -278,6 +278,13 @@ function Sync(method, model, opts) {
 	var isCollection = ( model instanceof Backbone.Collection) ? true : false;
 	var returnErrorResponse = model.config.returnErrorResponse;
 	
+	// check for global sql settings
+	if (model.config.adapter.sql) {
+		if(opts.sql) 
+			_.extend(model.config.adapter.sql, opts.sql);
+		
+		opts.sql = _.clone(model.config.adapter.sql);
+	}
 	var singleModelRequest = null;
 	var cachedData = opts.cachedData;
 	if (lastModifiedColumn) {
@@ -290,7 +297,7 @@ function Sync(method, model, opts) {
 	}
 
 	if (DEBUG) { 
-		Ti.API.info('SYNC start for ' + model.config.adapter.collection_name + '	, method: ' + method);
+		Ti.API.debug('SYNC start for ' + model.config.adapter.collection_name + '	, method: ' + method);
 		if (cachedData)
 			Ti.API.info('	using cached data : \n' + JSON.stringify(cachedData, null, '\t'));
 	}
