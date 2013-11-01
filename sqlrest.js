@@ -129,6 +129,14 @@ function Migrator(config, transactionDb, Model) {
 		var sql = "CREATE TABLE IF NOT EXISTS " + this.table + " ( " + columns.join(",") + ")";
 		this.db.execute(sql);
 	};
+	this.createIndex = function(config) {
+		for (var i in config) {
+			var columns = [];
+			columns.push(config[i]);
+			var sql = "CREATE INDEX IF NOT EXISTS " + i + " ON " + this.table + " ( " + columns.join(",") + ")";
+			this.db.execute(sql);	
+		}
+	};	
 	this.dropTable = function(config) {
 		this.db.execute("DROP TABLE IF EXISTS " + this.table);
 	};

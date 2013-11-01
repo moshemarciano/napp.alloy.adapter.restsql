@@ -18,7 +18,7 @@ Simple add the following to your model in `PROJECT_FOLDER/app/models/`.
 				"title":"text",
 				"modified":text
 			},
-	       relations : {
+	       relations : { // optional
         		'photos' : {
         			method : 'fetchPhotos', // optional, if not set will be determined automatically
         			collection_id : 'album_id' // optional, if not set, determined automatically
@@ -57,6 +57,26 @@ Simple add the following to your model in `PROJECT_FOLDER/app/models/`.
 Then add the `sqlrest.js` to `PROJECT_FOLDER/assets/alloy/sync/`. Create the folders if they dont exist. 
 
 Use the `debug` property in the above example to get logs printed with sql statements and server respose to debug your usage of the sqlrest adapter.
+
+## New migration methods
+
+### createIndex (@moshemarciano)
+
+Adds more indexes to the database table, primary key is already an index.
+both one column index and multiple column index are supported 
+
+	migration.up = function(db) {
+		db.createTable({
+	        columns: {
+	            id: 'INTEGER PRIMARY KEY',
+	            title: 'TEXT'
+	        }
+		});
+		db.createIndex({
+			'firstIdx' : ['title', 'time'],   
+		   	'timeIdx' : 'time'
+		});
+	};
 
 
 ## Special Properties
