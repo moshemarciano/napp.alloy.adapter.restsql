@@ -260,6 +260,7 @@ function apiCall(_options, _callback) {
 function Sync(method, model, opts) {
 	var table = model.config.adapter.collection_name, columns = model.config.columns, dbName = model.config.adapter.db_name || ALLOY_DB_DEFAULT, resp = null, db;
 	model.idAttribute = model.config.adapter.idAttribute;
+	model.deletedAttribute = model.config.adapter.deletedAttribute;
 	//fix for collection
 	var DEBUG = model.config.debug;
 	var lastModifiedColumn = model.config.adapter.lastModifiedColumn;
@@ -281,9 +282,9 @@ function Sync(method, model, opts) {
 	}
 
 	if (DEBUG) { 
-		Ti.API.error('SYNC start for ' + model.config.adapter.collection_name + '	method:' + method
-			+ '	model:' + JSON.stringify(model.config, null, '\t') + '	opts:' + JSON.stringify(opts, null, '\t')
-			+ '	cache:' + JSON.stringify(cachedData, null, '\t'));
+		Ti.API.info('SYNC start for ' + model.config.adapter.collection_name + '	, method: ' + method);
+		if (cachedData)
+			Ti.API.info('	using cached data : \n' + JSON.stringify(cachedData, null, '\t'));
 	}
 	
 	//REST API
@@ -546,7 +547,7 @@ function Sync(method, model, opts) {
 			return;
 		}
 		if (!_.isArray(data)) {// its a model
-			if (!_.isUndefined(data["is_deleted"])) {
+			if (!_.isUndefined(data[model.deletedAttribute])) {
 				//delete item
 				deleteSQL(data[model.idAttribute]);
 			} else if (sqlFindItem(data[model.idAttribute]).length == 1) {
@@ -559,7 +560,7 @@ function Sync(method, model, opts) {
 		} else {//its an array of models
 			var currentModels = sqlCurrentModels();
 			for (var i in data) {
-				if (!_.isUndefined(data[i]["is_deleted"])) {
+				if (!_.isUndefined(data[i][model.deletedAttribute])) {
 					//delete item
 					deleteSQL(data[i][model.idAttribute]);
 				} else if (_.indexOf(currentModels, data[i][model.idAttribute]) != -1) {
