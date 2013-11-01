@@ -617,12 +617,23 @@ function Sync(method, model, opts) {
 			}
 		}
 
+		var fields = []; 
+		_.extend(fields, columns, model.config.relations);
 		// Create arrays for insert query
 		var names = [], values = [], q = [];
-		for (var k in columns) {
+		for (var k in fields) {
 			names.push(k);
 			if (_.isObject(attrObj[k])) {
-				values.push(JSON.stringify(attrObj[k]));
+				if(!_.isUndefined(Alloy.Collections[k])) { // is this in itself another collection?
+					if (DEBUG) {
+						Ti.API.info("running SYNC for " + k);	
+						Ti.API.error('method: ' + method);
+						Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
+					}						
+					Alloy.Collections[k].sync(method, Alloy.Collections[k], {"cachedData": attrObj[k]});
+					continue;
+				} else
+					values.push(JSON.stringify(attrObj[k])); 
 			} else {
 				values.push(attrObj[k]);
 			}
@@ -769,12 +780,11 @@ function Sync(method, model, opts) {
 			if (!_.isUndefined(attrObj[k])) { //only update those who are in the data
 				if (_.isObject(attrObj[k])) {					
 					if(!_.isUndefined(Alloy.Collections[k])) { // is this in itself another collection?
-						Ti.API.info("running SYNC for " + k);	
-						//Alloy.Collections[k].sync(method, model, opts, attrObj[k]);
-						o = Alloy.Collections[k];
-						Ti.API.error('method: ' + method);
-						Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
-						
+						if (DEBUG) {
+							Ti.API.info("running SYNC for " + k);	
+							Ti.API.error('method: ' + method);
+							Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
+						}						
 						Alloy.Collections[k].sync(method, Alloy.Collections[k], {"cachedData": attrObj[k]});
 						continue;
 					} else
@@ -783,11 +793,6 @@ function Sync(method, model, opts) {
 					values.push(attrObj[k]);
 					
 				names.push(k + '=?');
-				if (_.isObject(attrObj[k])) {
-					values.push(JSON.stringify(attrObj[k]));
-				} else {
-					values.push(attrObj[k]);
-				}
 				q.push('?');
 			}
 		}
@@ -815,11 +820,28 @@ function Sync(method, model, opts) {
 	}
 
 	function deleteSQL(id) {
+		
+		// first check if we have sub-models/collections
+		for (var k in model.config.relations) {
+			if (_.isObject(attrObj[k])) {
+				if(!_.isUndefined(Alloy.Collections[k])) { // is this in itself another collection?
+					if (DEBUG) {
+						Ti.API.info("running SYNC for " + k);	
+						Ti.API.error('method: ' + method);
+						Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
+					}						
+					Alloy.Collections[k].sync(method, Alloy.Collections[k], {"cachedData": attrObj[k]});
+				} 
+			}
+		}
+		
 		var sql = 'DELETE FROM ' + table + ' WHERE ' + model.idAttribute + '=?';
 		// execute the delete
 		db = Ti.Database.open(dbName);
 		db.execute(sql, id || model.id);
 		db.close();
+		if (DEBUG)
+			Ti.API.info('DELETE FROM ' + table + ' WHERE ' + model.idAttribute + '=' + id || model.id);
 
 		model.id = null;
 		return model.toJSON();
