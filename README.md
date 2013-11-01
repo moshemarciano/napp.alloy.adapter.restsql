@@ -18,6 +18,13 @@ Simple add the following to your model in `PROJECT_FOLDER/app/models/`.
 				"title":"text",
 				"modified":text
 			},
+	       relations : {
+        		'photos' : {
+        			method : 'fetchPhotos', // optional, if not set will be determined automatically
+        			collection_id : 'album_id' // optional, if not set, determined automatically
+        			type : 'one' // optional, 'one to many' or 'many to many'
+        		}
+	        },
 			"URL": "http://urlPathToRestAPIServer.com/api/modelname",
 			"debug": 1, //debug mode enabled
 			"useStrictValidation":1, // validates each item if all columns are present
@@ -25,6 +32,7 @@ Simple add the following to your model in `PROJECT_FOLDER/app/models/`.
 				"type" : "sqlrest",
 				"collection_name" : "modelname",
 				"idAttribute" : "id",
+				 "deletedAttribute" : "deleted_at"
 				
 				//optimise the amount of data transfer from remote server to app
 				"lastModifiedColumn": "modified"
@@ -52,6 +60,46 @@ Use the `debug` property in the above example to get logs printed with sql state
 
 
 ## Special Properties
+
+### Relationships (@moshemarciano) (still in beta)
+
+Setup a relationship between models/collections, if your backend sends back JSON data which includes albums for example, and each album has a photos attribute which in itself is a sub collection, you can specify it like this and the adapter will detect it and begin a recursive SYNC operation on the sub-collection, so in one fetch, one HTTP request you can update multiple collections.
+
+    relations : {
+		'photos' : {
+			method : 'fetchPhotos', // optional, if not set will be determined automatically
+			collection_id : 'album_id' // optional, if not set, determined automatically
+			type : 'one' // optional, 'one to many' or 'many to many'
+		}
+    },
+
+consider creating one 'fake' collection called 'updates' which can issue a REST request to the server and include a timestamp of the last fetch, the server returns new data for multiple collections which are automatically handled by the adapter and synced to the local SQL database in one single fetch. This can greatly reduce server round trips, code complexity and overall app feel.
+
+it will also create new methods for your model, named after the collection, for example if you specified a 'photos' collection, a new method will be added to the album model called 'fetchPhotos'. Also, if your albums collection id attribute is 'id', the adapter will automatically use 'album_id' to make the connection between the photos collection and the albums collection. The naming uses [underscore.inflections.js](https://github.com/jeremyruppel/underscore.inflection) code to get singular representations of collection and attributes names.
+
+You can override these automatic naming methods if you like as seen above.
+
+if you have a scenario in your app where you need to fetch the sub collection data for the user selected master collection, you can do this:
+
+		albums.at(index).fetchPhotos({
+			success : function  (collection, response, options) {
+				Ti.API.info('photos for album : ' + JSON.stringify(photos, null, '\t'));
+			}, 
+			sql : { 
+				orderBy:"title" 
+			}	
+		});
+
+this way you only store in-memory the part of the data you need at any given point of time and not the whole data set. Can greatly reduce the amount of memory your app uses.
+
+### deletedAttribute (@moshemarciano)
+
+support custom column naming to help with backend frameworks that use other naming conventions, such as PHP Laravel 4 'deleted_at'
+
+	"adapter" : {
+		...
+		"deletedAttribute" : "deleted_at"
+	}, 
 
 ### Last Modified
 
