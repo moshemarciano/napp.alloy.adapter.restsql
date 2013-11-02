@@ -344,6 +344,10 @@ function Sync(method, model, opts) {
 			Ti.API.error("[SQL REST API] ERROR: NO BASE URL");
 			return;
 		}
+		// parse url params {tokens}
+		_.each(params.urlParams, function(value,key) {
+			params.url = params.url.replace('{' + key + '}', value, "gi");
+		});
 	}
 
 	// For older servers, emulate JSON by encoding the request into an HTML-form.

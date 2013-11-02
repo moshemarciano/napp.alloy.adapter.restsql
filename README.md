@@ -81,6 +81,27 @@ both one column index and multiple column index are supported
 
 ## Special Properties
 
+### URL Parameters (@moshemarciano)
+
+Use a custom URL that only part of it changes from one HTTP call to the other
+
+	exports.definition = {
+		config : {
+			.
+			.
+			'URL': 'http://urlPathToRestAPIServer.com/api/albums/{album_id}/modelname',
+			.
+			.
+
+	photos.fetch({
+		urlParams: {
+			album_id : 34	
+		},
+		.
+		.
+
+parameters will be replaced *before* the URL is used to communicate with the server
+
 ### Relationships (@moshemarciano) (still in beta)
 
 Setup a relationship between models/collections, if your backend sends back JSON data which includes albums for example, and each album has a photos attribute which in itself is a sub collection, you can specify it like this and the adapter will detect it and begin a recursive SYNC operation on the sub-collection, so in one fetch, one HTTP request you can update multiple collections.
