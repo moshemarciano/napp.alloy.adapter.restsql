@@ -109,7 +109,7 @@ Setup a relationship between models/collections, if your backend sends back JSON
     relations : {
 		'photos' : {
 			method : 'fetchPhotos', // optional, if not set will be determined automatically
-			collection_id : 'album_id' // optional, if not set, determined automatically
+			collection_id : 'album_id', // optional, if not set, determined automatically
 			type : 'one' // optional, 'one to many' or 'many to many'
 		}
     },
