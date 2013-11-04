@@ -268,7 +268,7 @@ function apiCall(_options, _callback) {
 function Sync(method, model, opts) {
 	var table = model.config.adapter.collection_name, columns = model.config.columns, dbName = model.config.adapter.db_name || ALLOY_DB_DEFAULT, resp = null, db;
 	model.idAttribute = model.config.adapter.idAttribute;
-	model.deletedAttribute = model.config.adapter.deletedAttribute;
+	model.deletedAttribute = model.config.adapter.deletedAttribute || 'is_deleted';
 	//fix for collection
 	var DEBUG = model.config.debug;
 	var lastModifiedColumn = model.config.adapter.lastModifiedColumn;
@@ -298,8 +298,8 @@ function Sync(method, model, opts) {
 
 	if (DEBUG) { 
 		Ti.API.debug('SYNC start for ' + model.config.adapter.collection_name + '	, method: ' + method);
-		if (cachedData)
-			Ti.API.info('	using cached data : \n' + JSON.stringify(cachedData, null, '\t'));
+		// if (cachedData)
+			// Ti.API.info('	using cached data : \n' + JSON.stringify(cachedData, null, '\t'));
 	}
 	
 	//REST API
@@ -385,7 +385,7 @@ function Sync(method, model, opts) {
 			params.data = JSON.stringify(model.toJSON());
 			if (DEBUG) {
 				Ti.API.info("[SQL REST API] options: ");
-				Ti.API.info(params);
+				//Ti.API.info(params);
 			}
 			apiCall(params, function(_response) {
 				if (_response.success) {
@@ -429,7 +429,7 @@ function Sync(method, model, opts) {
 
 			if (DEBUG) {
 				Ti.API.info("[SQL REST API] options: ");
-				Ti.API.info(params);
+				//Ti.API.info(params);
 			}
 
 			if (!params.localOnly && (params.initFetchWithLocalData || initFetchWithLocalData)) {
@@ -447,8 +447,7 @@ function Sync(method, model, opts) {
 			apiCall(params, function(_response) {
 				if (_response.success) {
 					var data = parseJSON(_response, parentNode);
-					
-					Ti.API.info("[CHECKSUM] check");
+//					Ti.API.info("[CHECKSUM] check");
 //					if ( (model.config.checksum && data[model.config.checksum]) ||
 //						 (_.isUndefined(model.config.checksum) && data.checksum) ) {
 						// did the response include a checksum save
@@ -503,7 +502,7 @@ function Sync(method, model, opts) {
 			params.data = JSON.stringify(model.toJSON());
 			if (DEBUG) {
 				Ti.API.info("[SQL REST API] options: ");
-				Ti.API.info(params);
+				//Ti.API.info(params);
 			}
 			apiCall(params, function(_response) {
 				if (_response.success) {
@@ -533,7 +532,7 @@ function Sync(method, model, opts) {
 
 			if (DEBUG) {
 				Ti.API.info("[SQL REST API] options: ");
-				Ti.API.info(params);
+				//Ti.API.info(params);
 			}
 			apiCall(params, function(_response) {
 				if (_response.success) {
@@ -563,10 +562,11 @@ function Sync(method, model, opts) {
 		}
 		if (!data) {
 			// its empty
+			Ti.API.error('in saveData: no data to save, aborting');
 			return;
 		}
 		if (!_.isArray(data)) {// its a model
-			if (!_.isUndefined(data[model.deletedAttribute])) {
+			if (!_.isUndefined(data[model.deletedAttribute]) && (data[i][model.deletedAttribute] != null)) {
 				//delete item
 				deleteSQL(data[model.idAttribute]);
 			} else if (sqlFindItem(data[model.idAttribute]).length == 1) {
@@ -579,7 +579,7 @@ function Sync(method, model, opts) {
 		} else {//its an array of models
 			var currentModels = sqlCurrentModels();
 			for (var i in data) {
-				if (!_.isUndefined(data[i][model.deletedAttribute])) {
+				if (!_.isUndefined(data[i][model.deletedAttribute]) && (data[i][model.deletedAttribute] != null)) {
 					//delete item
 					deleteSQL(data[i][model.idAttribute]);
 				} else if (_.indexOf(currentModels, data[i][model.idAttribute]) != -1) {
@@ -642,53 +642,56 @@ function Sync(method, model, opts) {
 		// Create arrays for insert query
 		var names = [], values = [], q = [];
 		for (var k in fields) {
-			names.push(k);
 			if (_.isObject(attrObj[k])) {
-				if(!_.isUndefined(Alloy.Collections[k])) { // is this in itself another collection?
+				if(!_.isUndefined(Alloy.Collections[k]) && Object.keys(attrObj[k]).length) { // is this in itself another collection?
 					if (DEBUG) {
-						Ti.API.info("running SYNC for " + k);	
+						Ti.API.info("[createSQL] running SYNC for " + k);
 						Ti.API.error('method: ' + method);
-						Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
+						//Ti.API.error('data: ' + JSON.stringify(attrObj[k], null, '\t'));
+						//Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
 					}						
 					Alloy.Collections[k].sync(method, Alloy.Collections[k], {"cachedData": attrObj[k]});
 					continue;
 				} else
-					values.push(JSON.stringify(attrObj[k])); 
-			} else {
-				values.push(attrObj[k]);
-			}
-			q.push('?');
-		}
+					columns[k] && names.push(k) && q.push('?') && values.push(JSON.stringify(attrObj[k])); 
+			} else
+				columns[k] && names.push(k) && q.push('?') && values.push(attrObj[k]);
+		} 
+		
 		if (lastModifiedColumn && _.isUndefined(params.disableLastModified)) {
 			values[_.indexOf(names, lastModifiedColumn)] = moment().format('YYYY-MM-DD HH:mm:ss');
 		}
 
-		// Assemble create query
-		var sqlInsert = "INSERT INTO " + table + " (" + names.join(",") + ") VALUES (" + q.join(",") + ");";
-
-		// execute the query and return the response
-		db = Ti.Database.open(dbName);
-		db.execute('BEGIN;');
-		db.execute(sqlInsert, values);
-		if (DEBUG) {
-			Ti.API.debug("createSQL sql: " + sqlInsert);
-			Ti.API.debug("createSQL values: " + JSON.stringify(values, null, '\t'));
-		}
-		// get the last inserted id
-		if (model.id === null) {
-			var sqlId = "SELECT last_insert_rowid();";
-			var rs = db.execute(sqlId);
-			if (rs.isValidRow()) {
-				model.id = rs.field(0);
-				attrObj[model.idAttribute] = model.id;
-			} else {
-				Ti.API.warn('Unable to get ID from database for model: ' + model.toJSON());
+		
+		if (values != '') { // skip if no values
+			// Assemble create query
+			var sqlInsert = "INSERT INTO " + table + " (" + names.join(",") + ") VALUES (" + q.join(",") + ");";
+			Ti.API.info(sqlInsert);
+			Ti.API.info(values);
+			// execute the query and return the response
+			db = Ti.Database.open(dbName);
+			db.execute('BEGIN;');
+			db.execute(sqlInsert, values);
+			if (DEBUG) {
+				Ti.API.debug("createSQL sql: " + sqlInsert);
+				Ti.API.debug("createSQL values: " + JSON.stringify(values, null, '\t'));
 			}
+			// get the last inserted id
+			if (model.id === null) {
+				var sqlId = "SELECT last_insert_rowid();";
+				var rs = db.execute(sqlId);
+				if (rs.isValidRow()) {
+					model.id = rs.field(0);
+					attrObj[model.idAttribute] = model.id;
+				} else {
+					Ti.API.warn('Unable to get ID from database for model: ' + model.toJSON());
+				}
+			}
+	
+			db.execute('COMMIT;');
+			db.close();
 		}
-
-		db.execute('COMMIT;');
-		db.close();
-
+		
 		return attrObj;
 	}
 
@@ -799,21 +802,18 @@ function Sync(method, model, opts) {
 		for (var k in fields) {
 			if (!_.isUndefined(attrObj[k])) { //only update those who are in the data
 				if (_.isObject(attrObj[k])) {					
-					if(!_.isUndefined(Alloy.Collections[k])) { // is this in itself another collection?
+					if(!_.isUndefined(Alloy.Collections[k]) && Object.keys(attrObj[k]).length) { // is this in itself another collection?
 						if (DEBUG) {
-							Ti.API.info("running SYNC for " + k);	
+							Ti.API.info("[updateSQL] running SYNC for " + k);	
 							Ti.API.error('method: ' + method);
-							Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
+							//Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
 						}						
 						Alloy.Collections[k].sync(method, Alloy.Collections[k], {"cachedData": attrObj[k]});
 						continue;
 					} else
-						values.push(JSON.stringify(attrObj[k])); 
+						columns[k] && names.push(k + '=?') && q.push('?') && values.push(JSON.stringify(attrObj[k]));
 				} else
-					values.push(attrObj[k]);
-					
-				names.push(k + '=?');
-				q.push('?');
+					columns[k] && names.push(k + '=?') && q.push('?') && values.push(attrObj[k]);
 			}
 		}
 
@@ -843,12 +843,12 @@ function Sync(method, model, opts) {
 		
 		// first check if we have sub-models/collections
 		for (var k in model.config.relations) {
-			if (_.isObject(attrObj[k])) {
-				if(!_.isUndefined(Alloy.Collections[k])) { // is this in itself another collection?
+			if (_.isObject(k)) {
+				if(!_.isUndefined(Alloy.Collections[k]) && Object.keys(attrObj[k]).length) { // is this in itself another collection?
 					if (DEBUG) {
-						Ti.API.info("running SYNC for " + k);	
+						Ti.API.info("[deleteSQL] running SYNC for " + k);	
 						Ti.API.error('method: ' + method);
-						Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
+						//Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
 					}						
 					Alloy.Collections[k].sync(method, Alloy.Collections[k], {"cachedData": attrObj[k]});
 				} 
@@ -921,8 +921,7 @@ function Sync(method, model, opts) {
 			data = _.isFunction(parentNode) ? parentNode(data) : traverseProperties(data, parentNode);
 		}
 		if (DEBUG) {
-			Ti.API.info("[SQL REST API] server response: ");
-			Ti.API.debug(data);
+			//Ti.API.debug('[SQL REST API PARSEJSON] : server response: ' + data);
 		}
 		return data;
 	}

@@ -142,6 +142,8 @@ support custom column naming to help with backend frameworks that use other nami
 		"deletedAttribute" : "deleted_at"
 	}, 
 
+NOTE for backward compatibility: value of deletedAttributed is checked and only processed and deleted if value is not null
+
 ### Last Modified
 
 Save a timestamp for each model in the database. Use the `lastModifiedColumn` property in the adapter config to send the HTTP Header "Last-Modifed" with the newest timestamp. This is great for improving the amount of data send from the remote server to the app. 
