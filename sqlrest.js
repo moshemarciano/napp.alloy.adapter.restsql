@@ -1,16 +1,17 @@
 /**
  * SQL Rest Adapter for Titanium Alloy
  * @author Mads Møller
- * @version 0.1.32
+ * @version 0.1.35
  * @fork moshemarciano
  * Copyright Napp ApS
  * www.napp.dk
  */
 
-var _ = require('alloy/underscore')._, util = require('alloy/sync/util');
-
-//until this issue is fixed: https://jira.appcelerator.org/browse/TIMOB-11752
-var Alloy = require("alloy"), Backbone = Alloy.Backbone, moment = require('alloy/moment');
+var _ = require('alloy/underscore')._, 
+	util = require('alloy/sync/util'),
+	Alloy = require("alloy"), 
+	Backbone = Alloy.Backbone, 
+	moment = require('alloy/moment');
 
 // The database name used when none is specified in the
 // model configuration.
@@ -271,10 +272,17 @@ function Sync(method, model, opts) {
 	model.deletedAttribute = model.config.adapter.deletedAttribute || 'is_deleted';
 	//fix for collection
 	var DEBUG = model.config.debug;
+	
+	// last modified 
 	var lastModifiedColumn = model.config.adapter.lastModifiedColumn;
+	var addModifedToUrl = model.config.adapter.addModifedToUrl;
+	var lastModifiedDateFormat = model.config.adapter.lastModifiedDateFormat;
+	
 	var parentNode = model.config.parentNode;
 	var useStrictValidation = model.config.useStrictValidation;
 	var initFetchWithLocalData = model.config.initFetchWithLocalData;
+	var deleteAllOnFetch = model.config.deleteAllOnFetch;
+	
 	var isCollection = ( model instanceof Backbone.Collection) ? true : false;
 	var returnErrorResponse = model.config.returnErrorResponse;
 	
@@ -407,7 +415,8 @@ function Sync(method, model, opts) {
 			});
 			break;
 		case 'read':
-			if (model.id) {
+		
+			if (!isCollection && model.id) {
 				// find model by id
 				params.url = params.url + '/' + model.id;
 			}
@@ -425,6 +434,14 @@ function Sync(method, model, opts) {
 			if (params.urlparams) {
 				// build url with parameters
 				params.url = encodeData(params.urlparams, params.url);
+			}
+			
+			// check is all the necessary info is in place for last modified
+			if (lastModifiedColumn && addModifedToUrl && lastModifiedValue) {
+				// add last modified date to url
+				var obj = {};
+				obj[lastModifiedColumn] = lastModifiedValue;
+				params.url = encodeData(obj, params.url);
 			}
 
 			if (DEBUG) {
@@ -446,6 +463,11 @@ function Sync(method, model, opts) {
 
 			apiCall(params, function(_response) {
 				if (_response.success) {
+					if(deleteAllOnFetch){
+						deleteAllSQL();
+					}
+					
+					
 					var data = parseJSON(_response, parentNode);
 //					Ti.API.info("[CHECKSUM] check");
 //					if ( (model.config.checksum && data[model.config.checksum]) ||
@@ -657,9 +679,10 @@ function Sync(method, model, opts) {
 			} else
 				columns[k] && names.push(k) && q.push('?') && values.push(attrObj[k]);
 		} 
-		
+		// Last Modified logic
+		// 
 		if (lastModifiedColumn && _.isUndefined(params.disableLastModified)) {
-			values[_.indexOf(names, lastModifiedColumn)] = moment().format('YYYY-MM-DD HH:mm:ss');
+			values[_.indexOf(names, lastModifiedColumn)] = lastModifiedDateFormat ? moment().format(lastModifiedDateFormat) : moment().format('YYYY-MM-DD HH:mm:ss');
 		}
 
 		
@@ -668,14 +691,16 @@ function Sync(method, model, opts) {
 			var sqlInsert = "INSERT INTO " + table + " (" + names.join(",") + ") VALUES (" + q.join(",") + ");";
 			Ti.API.info(sqlInsert);
 			Ti.API.info(values);
+
 			// execute the query and return the response
 			db = Ti.Database.open(dbName);
 			db.execute('BEGIN;');
 			db.execute(sqlInsert, values);
 			if (DEBUG) {
 				Ti.API.debug("createSQL sql: " + sqlInsert);
-				Ti.API.debug("createSQL values: " + JSON.stringify(values, null, '\t'));
-			}
+				Ti.API.debug("createSQL values: " + 	JSON.stringify(values, null, '\t'));			
+			} 
+			
 			// get the last inserted id
 			if (model.id === null) {
 				var sqlId = "SELECT last_insert_rowid();";
@@ -691,7 +716,10 @@ function Sync(method, model, opts) {
 			db.execute('COMMIT;');
 			db.close();
 		}
+
 		
+		db.close();
+
 		return attrObj;
 	}
 
@@ -827,7 +855,7 @@ function Sync(method, model, opts) {
 		// execute the update
 		db = Ti.Database.open(dbName);
 		db.execute(sql, values);
-
+		
 		if (lastModifiedColumn && _.isUndefined(params.disableLastModified)) {
 			var updateSQL = "UPDATE " + table + " SET " + lastModifiedColumn + " = DATETIME('NOW') WHERE " + model.idAttribute + "=?";
 			Ti.API.debug('=> set lastModified : ' + updateSQL);
@@ -865,6 +893,13 @@ function Sync(method, model, opts) {
 
 		model.id = null;
 		return model.toJSON();
+	}
+	
+	function deleteAllSQL(){
+		var sql = 'DELETE FROM ' + table;
+		db = Ti.Database.open(dbName);
+		db.execute(sql);
+		db.close();
 	}
 
 	function sqlCurrentModels() {
@@ -922,6 +957,7 @@ function Sync(method, model, opts) {
 		}
 		if (DEBUG) {
 			//Ti.API.debug('[SQL REST API PARSEJSON] : server response: ' + data);
+			Ti.API.debug(data);
 		}
 		return data;
 	}
