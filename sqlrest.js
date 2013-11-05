@@ -332,19 +332,6 @@ function Sync(method, model, opts) {
 		}
 	}
 
-	if (lastModifiedColumn && _.isUndefined(params.disableLastModified)) {
-		//send last modified model datestamp to the remote server
-		var lastModifiedValue = "";
-		try {
-			lastModifiedValue = sqlLastModifiedItem();
-		} catch(e) {
-			if (DEBUG) {
-				Ti.API.debug("[SQL REST API] LASTMOD SQL FAILED: ");
-			}
-		}
-		params.headers['Last-Modified'] = lastModifiedValue;
-	}
-
 	// We need to ensure that we have a base url.
 	if (!params.url  && !cachedData) {
 		params.url = (model.config.URL || model.url());
@@ -356,6 +343,19 @@ function Sync(method, model, opts) {
 		_.each(params.urlParams, function(value,key) {
 			params.url = params.url.replace('{' + key + '}', value, "gi");
 		});
+	}
+
+	if (lastModifiedColumn && _.isUndefined(params.disableLastModified)) {
+		//send last modified model datestamp to the remote server
+		var lastModifiedValue = "";
+		try {
+			lastModifiedValue = sqlLastModifiedItem();
+		} catch(e) {
+			if (DEBUG) {
+				Ti.API.debug("[SQL REST API] LASTMOD SQL FAILED: ");
+			}
+		}
+		params.headers['Last-Modified'] = lastModifiedValue;
 	}
 
 	// For older servers, emulate JSON by encoding the request into an HTML-form.
