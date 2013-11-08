@@ -274,7 +274,6 @@ function Sync(method, model, opts) {
 	model.deletedAttribute = model.config.adapter.deletedAttribute || 'is_deleted';
 	//fix for collection
 	var DEBUG = model.config.debug;
-	
 	// last modified 
 	var lastModifiedColumn = model.config.adapter.lastModifiedColumn;
 	var addModifedToUrl = model.config.adapter.addModifedToUrl;
@@ -287,7 +286,10 @@ function Sync(method, model, opts) {
 	
 	var isCollection = ( model instanceof Backbone.Collection) ? true : false;
 	var returnErrorResponse = model.config.returnErrorResponse;
+	model.config.adapter.isChanged = false;
 	opts.adapterConfig = model.config.adapter;
+	opts.trackChangesInMemory && (opts.adapterConfig.changed = []);
+	
 	// check for global sql settings
 	if (model.config.adapter.sql) {
 		if(opts.sql) 
@@ -672,7 +674,11 @@ function Sync(method, model, opts) {
 						//Ti.API.error('data: ' + JSON.stringify(attrObj[k], null, '\t'));
 						//Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
 					}						
-					Alloy.Collections[k].sync(method, Alloy.Collections[k], {"cachedData": attrObj[k], fetchTriggerOnChange : true});
+					Alloy.Collections[k].sync(method, Alloy.Collections[k], {
+						"cachedData": attrObj[k], 
+						fetchTriggerOnChange : true,
+						trackChangesInMemory : opts.trackChangesInMemory
+					});
 					continue;
 				} else
 					columns[k] && names.push(k) && q.push('?') && values.push(JSON.stringify(attrObj[k])); 
@@ -695,7 +701,6 @@ function Sync(method, model, opts) {
 			db = Ti.Database.open(dbName);
 			db.execute('BEGIN;');
 			db.execute(sqlInsert, values);
-			opts.isChanged = true;
 			if (DEBUG) {
 				Ti.API.debug("createSQL sql: " + sqlInsert);
 				Ti.API.debug("createSQL values: " + 	JSON.stringify(values, null, '\t'));			
@@ -712,7 +717,9 @@ function Sync(method, model, opts) {
 					Ti.API.warn('Unable to get ID from database for model: ' + model.toJSON());
 				}
 			}
-	
+			opts.isChanged = true;
+			opts.trackChangesInMemory && opts.adapterConfig.changed.push(model.id);
+
 			db.execute('COMMIT;');
 			db.close();
 		}
@@ -836,7 +843,11 @@ function Sync(method, model, opts) {
 							Ti.API.error('method: ' + method);
 							//Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
 						}						
-						Alloy.Collections[k].sync(method, Alloy.Collections[k], {"cachedData": attrObj[k]});
+						Alloy.Collections[k].sync(method, Alloy.Collections[k], {
+							"cachedData": attrObj[k], 
+							fetchTriggerOnChange : true,
+							trackChangesInMemory : opts.trackChangesInMemory
+						});
 						continue;
 					} else
 						columns[k] && names.push(k + '=?') && q.push('?') && values.push(JSON.stringify(attrObj[k]));
@@ -856,6 +867,7 @@ function Sync(method, model, opts) {
 		db = Ti.Database.open(dbName);
 		db.execute(sql, values);
 		opts.isChanged = true;
+		opts.trackChangesInMemory && opts.adapterConfig.changed.push(attrObj[model.idAttribute]);
 		if (lastModifiedColumn && _.isUndefined(params.disableLastModified)) {
 			var updateSQL = "UPDATE " + table + " SET " + lastModifiedColumn + " = DATETIME('NOW') WHERE " + model.idAttribute + "=?";
 			Ti.API.debug('=> set lastModified : ' + updateSQL);
@@ -878,7 +890,11 @@ function Sync(method, model, opts) {
 						Ti.API.error('method: ' + method);
 						//Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
 					}						
-					Alloy.Collections[k].sync(method, Alloy.Collections[k], {"cachedData": attrObj[k]});
+					Alloy.Collections[k].sync(method, Alloy.Collections[k], {
+						"cachedData": attrObj[k], 
+						fetchTriggerOnChange : true,
+						trackChangesInMemory : opts.trackChangesInMemory
+					});
 				} 
 			}
 		}
@@ -888,6 +904,7 @@ function Sync(method, model, opts) {
 		db = Ti.Database.open(dbName);
 		db.execute(sql, id || model.id);
 		opts.isChanged = true;
+		opts.trackChangesInMemory && opts.adapterConfig.changed.push(id || model.id);
 		db.close();
 		if (DEBUG)
 			Ti.API.info('DELETE FROM ' + table + ' WHERE ' + model.idAttribute + '=' + id || model.id);
