@@ -106,6 +106,18 @@ Use a custom URL that only part of it changes from one HTTP call to the other
 
 parameters will be replaced *before* the URL is used to communicate with the server
 
+### fetchTriggerOnChange (@moshemarciano)
+
+Only trigger a fetch on the collection if anything was done to change it (create/delete/update)
+	
+	photos.fetch({
+		fetchTriggerOnChange : true,
+		.
+		.
+
+use this property to reduce the need to do data processing and view updating if not needed. default behavior is to trigger a fetch even if no changes are made(backward compatibility)
+
+
 ### Relationships (@moshemarciano) (still in beta)
 
 Setup a relationship between models/collections, if your backend sends back JSON data which includes albums for example, and each album has a photos attribute which in itself is a sub collection, you can specify it like this and the adapter will detect it and begin a recursive SYNC operation on the sub-collection, so in one fetch, one HTTP request you can update multiple collections.
@@ -126,18 +138,22 @@ You can override these automatic naming methods if you like as seen above.
 
 if you have a scenario in your app where you need to fetch the sub collection data for the user selected master collection, you can do this:
 
-		albums.at(index).fetchPhotos({
-			success : function  (collection, response, options) {
-				Ti.API.info('photos for album : ' + JSON.stringify(photos, null, '\t'));
-			}, 
-			sql : { 
-				orderBy:"title" 
-			}	
-		});
+	albums.at(index).fetchPhotos({
+		success : function  (collection, response, options) {
+			Ti.API.info('photos for album : ' + JSON.stringify(photos, null, '\t'));
+		}, 
+		sql : { 
+			orderBy:"title" 
+		}	
+	});
 
 this way you only store in-memory the part of the data you need at any given point of time and not the whole data set. Can greatly reduce the amount of memory your app uses.
 
-note that when you use fetch with a success and error callbacks, it will only fire once, regardless of the number of sub collections retrieved in the fetch. Only the invoking collection/model will fire.
+note that when you use fetch with a success and error callbacks, it will only fire once, regardless of the number of sub collections retrieved in the fetch. Only the invoking collection/model will fire. However you can monitor sub collection changes using Backbone event listeners, all sub collections are fetched with implicit fetchTriggerOnChange property ON
+
+	Alloy.Collections.photos.on('fetch', function(e) {
+		Ti.API.debug('>>>>> business_types fetch');	
+	});
 
 ### recievedHeaders (@moshemarciano)
 

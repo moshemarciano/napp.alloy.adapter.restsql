@@ -182,7 +182,7 @@ function apiCall(_options, _callback) {
 
 		//Prepare the request
 		xhr.open(_options.type, _options.url);
-		Ti.API.info('[apiCall] open url : ' + _options.url);
+		_options.url && Ti.API.info('[apiCall] open url : ' + _options.url);
 
         if (Alloy.CFG.httpUsername && Alloy.CFG.httpPassword) {
             // Http Auth
@@ -455,9 +455,7 @@ function Sync(method, model, opts) {
 				// read local data before receiving server data
 				resp = readSQL();
 				_.isFunction(params.success) && params.success(resp);
-				model.trigger("fetch", {
-					serverData : false
-				});
+				_.isUndefined(params.fetchTriggerOnChange) ? model.trigger("fetch") : opts.isChanged && model.trigger("fetch", {serverData : false});					
 			}
 			
 			if (cachedData)
@@ -487,7 +485,7 @@ function Sync(method, model, opts) {
 					}
 					resp = readSQL(data);
 					_.isFunction(params.success) && params.success(resp);
-					model.trigger("fetch");
+					_.isUndefined(params.fetchTriggerOnChange) ? model.trigger("fetch") : opts.isChanged && model.trigger("fetch");					
 				} else {
 					//error or offline - read local data
 					resp = readSQL();
@@ -497,7 +495,7 @@ function Sync(method, model, opts) {
 					} else {
 						//offline - still a data success
 						_.isFunction(params.success) && params.success(resp);
-						model.trigger("fetch");
+						_.isUndefined(params.fetchTriggerOnChange) ? model.trigger("fetch") : opts.isChanged && model.trigger("fetch");					
 					}
 				}
 			});
@@ -674,7 +672,7 @@ function Sync(method, model, opts) {
 						//Ti.API.error('data: ' + JSON.stringify(attrObj[k], null, '\t'));
 						//Ti.API.error('model: ' + JSON.stringify(Alloy.Collections[k].config, null, '\t'));
 					}						
-					Alloy.Collections[k].sync(method, Alloy.Collections[k], {"cachedData": attrObj[k]});
+					Alloy.Collections[k].sync(method, Alloy.Collections[k], {"cachedData": attrObj[k], fetchTriggerOnChange : true});
 					continue;
 				} else
 					columns[k] && names.push(k) && q.push('?') && values.push(JSON.stringify(attrObj[k])); 
@@ -686,7 +684,6 @@ function Sync(method, model, opts) {
 		if (lastModifiedColumn && _.isUndefined(params.disableLastModified)) {
 			values[_.indexOf(names, lastModifiedColumn)] = lastModifiedDateFormat ? moment().format(lastModifiedDateFormat) : moment().format('YYYY-MM-DD HH:mm:ss');
 		}
-
 		
 		if (values != '') { // skip if no values
 			// Assemble create query
@@ -698,6 +695,7 @@ function Sync(method, model, opts) {
 			db = Ti.Database.open(dbName);
 			db.execute('BEGIN;');
 			db.execute(sqlInsert, values);
+			opts.isChanged = true;
 			if (DEBUG) {
 				Ti.API.debug("createSQL sql: " + sqlInsert);
 				Ti.API.debug("createSQL values: " + 	JSON.stringify(values, null, '\t'));			
@@ -857,7 +855,7 @@ function Sync(method, model, opts) {
 		// execute the update
 		db = Ti.Database.open(dbName);
 		db.execute(sql, values);
-		
+		opts.isChanged = true;
 		if (lastModifiedColumn && _.isUndefined(params.disableLastModified)) {
 			var updateSQL = "UPDATE " + table + " SET " + lastModifiedColumn + " = DATETIME('NOW') WHERE " + model.idAttribute + "=?";
 			Ti.API.debug('=> set lastModified : ' + updateSQL);
@@ -889,6 +887,7 @@ function Sync(method, model, opts) {
 		// execute the delete
 		db = Ti.Database.open(dbName);
 		db.execute(sql, id || model.id);
+		opts.isChanged = true;
 		db.close();
 		if (DEBUG)
 			Ti.API.info('DELETE FROM ' + table + ' WHERE ' + model.idAttribute + '=' + id || model.id);
