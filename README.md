@@ -137,6 +137,22 @@ if you have a scenario in your app where you need to fetch the sub collection da
 
 this way you only store in-memory the part of the data you need at any given point of time and not the whole data set. Can greatly reduce the amount of memory your app uses.
 
+note that when you use fetch with a success and error callbacks, it will only fire once, regardless of the number of sub collections retrieved in the fetch. Only the invoking collection/model will fire.
+
+### recievedHeaders (@moshemarciano)
+
+used by the adapter to store the HTTP headers of the last fetch from the server, it is positioned under the config.adapter node of your model config. This is read only.
+
+	Alloy.Collections.updates.fetch({
+		error : function (collection, response) {
+			Ti.API.error('>>>>> fetch updates failed');		
+		},
+		success : function (collection, response) {
+			Ti.App.Properties.setString('last_update_timestamp', Alloy.Collections.updates.config.adapter.recievedHeaders.Date);
+		}
+	});	
+
+
 ### deletedAttribute (@moshemarciano)
 
 support custom column naming to help with backend frameworks that use other naming conventions, such as PHP Laravel 4 'deleted_at'

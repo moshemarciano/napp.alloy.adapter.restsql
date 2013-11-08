@@ -182,6 +182,7 @@ function apiCall(_options, _callback) {
 
 		//Prepare the request
 		xhr.open(_options.type, _options.url);
+		Ti.API.info('[apiCall] open url : ' + _options.url);
 
         if (Alloy.CFG.httpUsername && Alloy.CFG.httpPassword) {
             // Http Auth
@@ -190,7 +191,8 @@ function apiCall(_options, _callback) {
         }
 
 		xhr.onload = function() {
-			var responseJSON, success = true, error;
+			var responseJSON, success = true, error;			
+			_options.adapterConfig.recievedHeaders = OS_IOS ? xhr.getResponseHeaders() : xhr.getAllResponseHeaders();
 			
 			// parse JSON
 			try {
@@ -285,7 +287,7 @@ function Sync(method, model, opts) {
 	
 	var isCollection = ( model instanceof Backbone.Collection) ? true : false;
 	var returnErrorResponse = model.config.returnErrorResponse;
-	
+	opts.adapterConfig = model.config.adapter;
 	// check for global sql settings
 	if (model.config.adapter.sql) {
 		if(opts.sql) 
@@ -341,7 +343,7 @@ function Sync(method, model, opts) {
 		}
 		// parse url params {tokens}
 		_.each(params.urlParams, function(value,key) {
-			params.url = params.url.replace('{' + key + '}', value, "gi");
+			params.url = params.url.replace('{' + key + '}', value ? escape(value) : '', "gi");
 		});
 	}
 
