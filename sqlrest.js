@@ -722,7 +722,7 @@ function Sync(method, model, opts) {
 			opts.trackChangesInMemory && opts.adapterConfig.changed.push(model.id);
 			if(opts.trackChangesInModel && opts.trackModel) { 
 				var sql = "INSERT INTO '" + opts.trackModel + "' (id, collection, changedID, type, priority) VALUES (null,?,?,?,?)";
-				values = [ model.config.adapter.collection_name, model.id, 'C', 1 ];
+				values = [ model.config.adapter.collection_name, attrObj[model.idAttribute], 'C', 1 ];
 				db.execute(sql, values);
 			}
 			db.execute('COMMIT;');
