@@ -117,26 +117,7 @@ Only trigger a fetch on the collection if anything was done to change it (create
 
 use this property to reduce the need to do data processing and view updating if not needed. default behavior is to trigger a fetch even if no changes are made(backward compatibility)
 
-
-### trackChangesInMemory (@moshemarciano)
-
-Tells the adapter to track changes (create/delete/update) and collect the model id for each change. The changed models are collected into the *config.adapter.changed* array
-	
-	photos.fetch({
-		fetchTriggerOnChange : true,
-		trackChangesInMemory : true,
-		.
-		.
-
-	photos.on('fetch', function(e) {
-		_.each(photos.config.adapter.changed, function(model) {
-			// only changed models are processed
-			alert(photos.at(model).get('title'));
-		});
-	});
-
-
-### Relationships (@moshemarciano) (still in beta)
+### Relationships (@moshemarciano)
 
 Setup a relationship between models/collections, if your backend sends back JSON data which includes albums for example, and each album has a photos attribute which in itself is a sub collection, you can specify it like this and the adapter will detect it and begin a recursive SYNC operation on the sub-collection, so in one fetch, one HTTP request you can update multiple collections.
 
@@ -169,20 +150,89 @@ this way you only store in-memory the part of the data you need at any given poi
 
 note that when you use fetch with a success and error callbacks, it will only fire once, regardless of the number of sub collections retrieved in the fetch. Only the invoking collection/model will fire. However you can monitor sub collection changes using Backbone event listeners, all sub collections are fetched with implicit fetchTriggerOnChange property ON
 
-	Alloy.Collections.photos.on('fetch', function(e) {
+	photos.on('fetch', function(e) {
 		Ti.API.debug('>>>>> business_types fetch');	
 	});
+
+### trackChangesInMemory (@moshemarciano)
+
+Tells the adapter to track changes (create/delete/update) and collect the model id for each change. The changed models are collected into the *config.adapter.changed* array
+	
+	photos.fetch({
+		fetchTriggerOnChange : true,
+		trackChangesInMemory : true,
+		.
+		.
+
+	photos.on('fetch', function(e) {
+		_.each(photos.config.adapter.changed, function(model) {
+			// only changed models are processed
+			alert(photos.at(model).get('title'));
+		});
+	});
+
+### trackChangesInModel (@moshemarciano)
+
+Tells the adapter to track changes (create/delete/update) and collect the changed model id for each change. The changed models are collected into a database based model specified by the *trackModel* property or if not set, in the model name. Changes are tracked for the main collection as well as every related model as specified in the *relations* property
+
+the model needs to follow a specific structure:
+	
+	exports.definition = {
+	    config : {
+	        'URL': baseURL + '/updates/{timestamp}',
+	        'debug': debugMode,
+	        columns : {
+	        	id : 'INTEGER PRIMARY KEY AUTOINCREMENT',
+				collection : 'TEXT', 
+				changedID : 'INTEGER', 
+				type : 'TEXT', 
+				priority : 'INTEGER'
+	        },
+	 	    relations : {
+				'albums' : {},
+				'photos' : {},			
+		    },        
+	        'adapter' : {
+	            'type' : 'sqlrest',
+	            'collection_name' : 'updates',
+	            'idAttribute' : 'id'
+	        },
+	    },
+	    .
+	    .
+	    .
+
+In this case it will use the *updates* table/model name since no specific *trackModel* was set.
+
+we can then ask the adapter to fetch the data from the server while keeping tabs on each model that changed, so we can later process the changes and act upon them(e.g. download the photos that changed). 
+
+	updates.fetch({
+		urlParams: {
+			timestamp : last_update_timestamp
+		},
+		fetchTriggerOnChange : true,
+		trackChangesInModel : true,
+		error : function (response, options) {
+			// handle error
+		},
+		success : function (response) {
+			// start processing changes saved 
+			// in the updates collection
+		}
+	});	
+
+
 
 ### recievedHeaders (@moshemarciano)
 
 used by the adapter to store the HTTP headers of the last fetch from the server, it is positioned under the config.adapter node of your model config. This is read only.
 
-	Alloy.Collections.updates.fetch({
+	updates.fetch({
 		error : function (collection, response) {
 			Ti.API.error('>>>>> fetch updates failed');		
 		},
 		success : function (collection, response) {
-			Ti.App.Properties.setString('last_update_timestamp', Alloy.Collections.updates.config.adapter.recievedHeaders.Date);
+			Ti.App.Properties.setString('last_update_timestamp', updates.config.adapter.recievedHeaders.Date);
 		}
 	});	
 

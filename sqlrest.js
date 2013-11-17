@@ -134,7 +134,7 @@ function Migrator(config, transactionDb, Model) {
 		for (var i in config) {
 			var columns = [];
 			columns.push(config[i]);
-			var sql = "CREATE INDEX IF NOT EXISTS " + i + " ON " + this.table + " ( " + columns.join(",") + ")";
+			var sql = "CREATE INDEX IF NOT EXISTS " + i + " ON '" + this.table + "' (" + columns.join(",") + ")";
 			this.db.execute(sql);	
 		}
 	};	
@@ -291,12 +291,11 @@ function Sync(method, model, opts) {
 	opts.trackChangesInMemory && (opts.adapterConfig.changed = []);
 	
 	// check for global sql settings
-	if (model.config.adapter.sql) {
-		if(opts.sql) 
-			_.extend(model.config.adapter.sql, opts.sql);
-		
-		opts.sql = _.clone(model.config.adapter.sql);
-	}
+    if (model.config.adapter.sql) {
+        opts.sql && _.extend(model.config.adapter.sql, opts.sql);
+        opts.sql = _.clone(model.config.adapter.sql);
+    }
+    
 	var singleModelRequest = null;
 	var cachedData = opts.cachedData;
 	if (lastModifiedColumn) {
@@ -677,13 +676,15 @@ function Sync(method, model, opts) {
 					Alloy.Collections[k].sync(method, Alloy.Collections[k], {
 						"cachedData": attrObj[k], 
 						fetchTriggerOnChange : true,
-						trackChangesInMemory : opts.trackChangesInMemory
+						trackChangesInMemory : opts.trackChangesInMemory,
+						trackChangesInModel : opts.trackChangesInModel,
+						trackModel : opts.trackModel || table
 					});
 					continue;
 				} else
-					columns[k] && names.push(k) && q.push('?') && values.push(JSON.stringify(attrObj[k])); 
+					columns[k] && attrObj[k] && names.push(k) && q.push('?') && values.push(JSON.stringify(attrObj[k])); 
 			} else
-				columns[k] && names.push(k) && q.push('?') && values.push(attrObj[k]);
+				columns[k] && attrObj[k] && names.push(k) && q.push('?') && values.push(attrObj[k]);
 		} 
 		// Last Modified logic
 		// 
@@ -691,7 +692,7 @@ function Sync(method, model, opts) {
 			values[_.indexOf(names, lastModifiedColumn)] = lastModifiedDateFormat ? moment().format(lastModifiedDateFormat) : moment().format('YYYY-MM-DD HH:mm:ss');
 		}
 		
-		if (values != '') { // skip if no values
+		if (values.length) { // skip if no values
 			// Assemble create query
 			var sqlInsert = "INSERT INTO " + table + " (" + names.join(",") + ") VALUES (" + q.join(",") + ");";
 			Ti.API.info(sqlInsert);
@@ -719,7 +720,11 @@ function Sync(method, model, opts) {
 			}
 			opts.isChanged = true;
 			opts.trackChangesInMemory && opts.adapterConfig.changed.push(model.id);
-
+			if(opts.trackChangesInModel && opts.trackModel) { 
+				var sql = "INSERT INTO '" + opts.trackModel + "' (id, collection, changedID, type, priority) VALUES (null,?,?,?,?)";
+				values = [ model.config.adapter.collection_name, model.id, 'C', 1 ];
+				db.execute(sql, values);
+			}
 			db.execute('COMMIT;');
 			db.close();
 		}
@@ -846,7 +851,9 @@ function Sync(method, model, opts) {
 						Alloy.Collections[k].sync(method, Alloy.Collections[k], {
 							"cachedData": attrObj[k], 
 							fetchTriggerOnChange : true,
-							trackChangesInMemory : opts.trackChangesInMemory
+							trackChangesInMemory : opts.trackChangesInMemory,
+							trackChangesInModel : opts.trackChangesInModel,
+							trackModel : opts.trackModel || table
 						});
 						continue;
 					} else
@@ -868,6 +875,12 @@ function Sync(method, model, opts) {
 		db.execute(sql, values);
 		opts.isChanged = true;
 		opts.trackChangesInMemory && opts.adapterConfig.changed.push(attrObj[model.idAttribute]);
+		if(opts.trackChangesInModel && opts.trackModel) { 
+			var sql = "INSERT INTO '" + opts.trackModel + "' (id, collection, changedID, type, priority) VALUES (null,?,?,?,?)";
+			values = [model.config.adapter.collection_name, attrObj[model.idAttribute], 'U', 1];
+			db.execute(sql, values);
+		}
+
 		if (lastModifiedColumn && _.isUndefined(params.disableLastModified)) {
 			var updateSQL = "UPDATE " + table + " SET " + lastModifiedColumn + " = DATETIME('NOW') WHERE " + model.idAttribute + "=?";
 			Ti.API.debug('=> set lastModified : ' + updateSQL);
@@ -893,7 +906,9 @@ function Sync(method, model, opts) {
 					Alloy.Collections[k].sync(method, Alloy.Collections[k], {
 						"cachedData": attrObj[k], 
 						fetchTriggerOnChange : true,
-						trackChangesInMemory : opts.trackChangesInMemory
+						trackChangesInMemory : opts.trackChangesInMemory,
+						trackChangesInModel : opts.trackChangesInModel,
+						trackModel : opts.trackModel || table
 					});
 				} 
 			}
@@ -905,6 +920,11 @@ function Sync(method, model, opts) {
 		db.execute(sql, id || model.id);
 		opts.isChanged = true;
 		opts.trackChangesInMemory && opts.adapterConfig.changed.push(id || model.id);
+		if(opts.trackChangesInModel && opts.trackModel) { 
+			var sql = "INSERT INTO '" + opts.trackModel + "' (id, collection, changedID, type, priority) VALUES (null,?,?,?,?)";
+			values = [ model.config.adapter.collection_name, id || model.id, 'D', 1 ];
+			db.execute(sql, values);
+		}
 		db.close();
 		if (DEBUG)
 			Ti.API.info('DELETE FROM ' + table + ' WHERE ' + model.idAttribute + '=' + id || model.id);
